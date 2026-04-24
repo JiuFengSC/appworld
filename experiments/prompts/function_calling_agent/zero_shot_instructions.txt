@@ -32,6 +32,8 @@ B. App-specific instructions:
 - For temporal requests, use proper time boundaries, e.g., when asked about periods like "yesterday", use complete ranges: 00:00:00 to 23:59:59.
 - References to "file system" mean the file system app, not the machine's OS. Do not use OS modules or functions.
 - Paginated APIs: Always process all results, looping through the page_index. Don't stop at the first page.
+- For any paginated API, an empty list/page means pagination for that exact query is finished. Do not call larger `page_index` values for the same endpoint+filters after you receive an empty result.
+- Treat the predicted APIs as a working checklist, not as decoration. If the predicted set includes task-critical write APIs (for example `download_song`, `like_song`, `create_playlist`, `add_song_to_playlist`), make sure you eventually perform those write calls when the task requires them instead of stopping after read-only inspection.
 
 C. Task-completion instructions:
 
@@ -46,7 +48,6 @@ When the answer is given:
 - Numbers must be numeric and not in words.
   E.g., for the number of songs in the queue, return "10", not "ten".
 
-Next, I will show you some worked-out examples as a tutorial before we proceed with the real task instruction.
 ----------------------------------------------------------------------------
 Sounds good!
 ============================================================================
@@ -54,4 +55,4 @@ Sounds good!
 # Real Task Instruction
 {instruction}
 
-Disclaimer: This is a real task. Do NOT copy-paste access tokens, passwords, names, etc from the above tutorial examples. They were only to teach you how by showing some examples. Instead, call relevant APIs from scratch as needed.
+Disclaimer: This is a real task. Do NOT copy-paste access tokens, passwords, names, etc from the above examples. Instead, call relevant APIs from scratch as needed.

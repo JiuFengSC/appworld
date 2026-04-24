@@ -226,7 +226,7 @@ MODEL_INFOS = [
         "model_server_config": {
             "enabled": True,
             "command": (  # NOTE: Do not add reasoning parser as it is disabled here.
-                "vllm serve Qwen/Qwen3-8B --max-num-seqs 5 --max-model-len 32000 "
+                "vllm serve Qwen/Qwen3-8B --max-num-seqs 5 --max-model-len 40000 "
                 "--enable-auto-tool-choice --tool-call-parser hermes --port {port}"
             ),
             "timeout": 600,

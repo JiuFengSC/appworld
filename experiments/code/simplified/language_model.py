@@ -185,6 +185,9 @@ def non_cached_lm_call(
     model_list: list[Any] | None = None,
     custom_llm_provider: str | None = None,
     api_type: API_TYPE_LITERAL = "chat_completions",
+    # extra_body passes arbitrary JSON fields to the request body (openai client only);
+    # used by vllm model configs to set chat_template_kwargs (e.g. enable_thinking=False)
+    extra_body: dict[str, Any] | None = None,
     # below params are only from appworld
     make_cacheable: bool = False,
     **kwargs: Any,
@@ -235,6 +238,8 @@ def non_cached_lm_call(
         kwargs["logit_bias"] = logit_bias
     if thinking is not None:
         kwargs["thinking"] = thinking
+    if extra_body is not None and client_name == "openai":
+        kwargs["extra_body"] = extra_body
     if base_url is not None and client_name != "openai":
         kwargs["base_url"] = base_url
     if api_version is not None:

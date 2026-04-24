@@ -22,6 +22,7 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
         api_predictor_config: dict[str, Any],
         demo_messages_file_path: str | None = None,
         remove_function_property_keys: Sequence[str] = (),
+        skill_text: str = "",
         **kwargs: Any,
     ):
         super().__init__(**kwargs)
@@ -52,6 +53,8 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
                     f"Invalid function property key: {function_property_key}. Valid keys are: {valid_keys}"
                 )
         self.remove_function_property_keys = remove_function_property_keys
+        self.skill_text = skill_text
+        self.allowed_function_names: set[str] = set()
 
     def initialize(self, world: AppWorld) -> None:
         super().initialize(world)
@@ -64,6 +67,7 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
             app_descriptions=app_descriptions_string,
             main_user=self.world.task.supervisor,
             max_steps=self.max_steps,
+            skill_text=self.skill_text,
         )
         header_messages = load_prompt_to_chat_messages(
             header_content,
@@ -76,6 +80,7 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
             app_descriptions=app_descriptions_string,
             main_user=self.world.task.supervisor,
             max_steps=self.max_steps,
+            skill_text=self.skill_text,
         )
         test_input_messages = load_prompt_to_chat_messages(
             test_input_content, skip_system_message=True, only_body=True, end_at=1
@@ -119,11 +124,48 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
             for doc in self.world.task.api_docs.function_calling()
             if doc["function"]["name"] in predicted_apis
         ]
+        self.allowed_function_names = {doc["function"]["name"] for doc in self.functions}
         for function in self.functions:
             for _, parameter_info in function["function"]["parameters"]["properties"].items():
                 for property_key in self.remove_function_property_keys:
                     parameter_info.pop(property_key, None)
         return execution_inputs, standardized_usage, Status(failed=False)
+
+    def tool_calls_to_execution_inputs(
+        self, tool_calls: Sequence[dict[str, Any]]
+    ) -> tuple[list[ExecutionIO], str]:
+        execution_inputs: list[ExecutionIO] = []
+        apis_code = ""
+        for tool_call in tool_calls:  # parallel tool calls.
+            function_name = tool_call["function"]["name"]
+            if function_name not in self.allowed_function_names:
+                print(
+                    "WARNING: Language model returned a function name that was not advertised "
+                    "in the tool schema. Skipping."
+                )
+                continue
+            if function_name.count(self.app_api_separator) != 1:
+                print("WARNING: Language model returned an invalid function name. Skipping.")
+                continue
+            app_name, api_name = function_name.split(self.app_api_separator, 1)
+            try:
+                arguments = json.loads(tool_call["function"]["arguments"])
+            except json.JSONDecodeError:
+                print("WARNING: Language model returned invalid arguments. Skipping.")
+                continue
+            if not isinstance(arguments, dict):
+                print("WARNING: Language model returned non-object arguments. Skipping.")
+                continue
+            arguments_str = str(arguments)
+            api_code = f"print({app_name}{self.app_api_separator}{api_name}(**{arguments_str}))"
+            function_id = tool_call.get("call_id", tool_call["id"])
+            execution_input = ExecutionIO(
+                content=api_code,
+                metadata={"id": function_id, "function_name": function_name},
+            )
+            execution_inputs.append(execution_input)
+            apis_code += api_code + "\n"
+        return execution_inputs, apis_code.rstrip()
 
     def second_onwards_execution_inputs_usage_and_status(
         self, last_execution_outputs: Sequence[ExecutionIO]
@@ -169,30 +211,10 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
         message_["tool_calls"] = message_.get("tool_calls", []) or []
         message_["tool_calls"] = message_["tool_calls"][: self.world.max_api_calls_per_interaction]
         self.messages.append(message_)
-        execution_inputs: list[ExecutionIO] = []
-        apis_code = ""
-        for tool_call in message_["tool_calls"]:  # parallel tool calls.
-            function_name = tool_call["function"]["name"]
-            if function_name.count(self.app_api_separator) != 1:
-                print("WARNING: Language model returned an invalid function name. Skipping.")
-                continue
-            app_name, api_name = function_name.split(self.app_api_separator, 1)
-            try:
-                arguments_str = str(json.loads(tool_call["function"]["arguments"]))
-            except json.JSONDecodeError:
-                print("WARNING: Language model returned an invalid arguments. Skipping.")
-                arguments_str = "{}"
-            api_code = f"print({app_name}{self.app_api_separator}{api_name}(**{arguments_str}))"
-            function_id = tool_call.get("call_id", tool_call["id"])
-            execution_input = ExecutionIO(
-                content=api_code,
-                metadata={"id": function_id, "function_name": function_name},
-            )
-            execution_inputs.append(execution_input)
-            apis_code += api_code + "\n"
+        execution_inputs, apis_code = self.tool_calls_to_execution_inputs(message_["tool_calls"])
         self.logger.show_message(
             role="agent",
-            content=apis_code.rstrip(),
+            content=apis_code,
             reasoning_content=reasoning_content,
             step_number=self.step_number,
             syntax="python",

@@ -1375,6 +1375,8 @@ class AppWorld:
         if self.remote_environment_url:
             self._remote_environment_call("close")
             return None
+        if self.raise_on_unsafe_execution:
+            self.safety_guard.disable()
         if self.remote_apis_url:
             clear_remote_dbs_cache(self.remote_apis_url, self.task_id)
         else:
