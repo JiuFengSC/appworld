@@ -26,6 +26,7 @@ A. General instructions:
 B. App-specific instructions:
 
 - All my personal information (biographical details, credentials, addresses, cards) is stored in the Supervisor app, accessible via its APIs.
+- Never fabricate passwords, access tokens, IDs, or other API-only values. If an API needs an `access_token`, first call `supervisor__show_account_passwords`, then call the app's login API, and use the exact `access_token` returned by login.
 - Any reference to my friends, family or any other person or relation refers to the people in my phone's contacts list.
 - Always obtain current date or time, from the phone app's get_current_date_and_time API, never from your internal clock.
 - All requests are concerning a single, default (no) time zone.
@@ -33,7 +34,9 @@ B. App-specific instructions:
 - References to "file system" mean the file system app, not the machine's OS. Do not use OS modules or functions.
 - Paginated APIs: Always process all results, looping through the page_index. Don't stop at the first page.
 - For any paginated API, an empty list/page means pagination for that exact query is finished. Do not call larger `page_index` values for the same endpoint+filters after you receive an empty result.
+- For paginated APIs, never set `page_limit` above 20. If you need more results, keep `page_limit` at 20 and increment `page_index`.
 - Treat the predicted APIs as a working checklist, not as decoration. If the predicted set includes task-critical write APIs (for example `download_song`, `like_song`, `create_playlist`, `add_song_to_playlist`), make sure you eventually perform those write calls when the task requires them instead of stopping after read-only inspection.
+- After the required write calls for a mutation task are done, call `supervisor__complete_task` promptly. Do not continue read-only verification loops unless a recent tool result clearly shows that a required write failed.
 
 C. Task-completion instructions:
 

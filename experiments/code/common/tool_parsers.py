@@ -10,6 +10,41 @@ class ToolParser(FromDict):
         raise NotImplementedError
 
 
+@ToolParser.register("qwen3")
+class Qwen3ToolParser(ToolParser):
+    # vLLM normally converts Qwen tool calls to OpenAI tool_calls, but some
+    # generations still surface the template text directly.
+    def parse(self, text: str) -> list[dict[str, Any]]:
+        tool_calls: list[dict[str, Any]] = []
+        marker = "<tool_call>"
+        decoder = json.JSONDecoder()
+        search_from = 0
+        while marker in text[search_from:]:
+            marker_index = text.index(marker, search_from)
+            json_start = marker_index + len(marker)
+            while json_start < len(text) and text[json_start].isspace():
+                json_start += 1
+            try:
+                raw_tool_call, json_end = decoder.raw_decode(text[json_start:])
+            except json.JSONDecodeError:
+                search_from = json_start
+                continue
+            if isinstance(raw_tool_call, dict) and "name" in raw_tool_call:
+                arguments = raw_tool_call.get("arguments", {})
+                tool_calls.append(
+                    {
+                        "id": None,
+                        "type": "function",
+                        "function": {
+                            "name": raw_tool_call["name"],
+                            "arguments": json.dumps(arguments, ensure_ascii=False),
+                        },
+                    }
+                )
+            search_from = json_start + json_end
+        return tool_calls
+
+
 @ToolParser.register("kimi-k2-instruct")
 class KimiK2InstructToolParser(ToolParser):
     # Note: Not needed with the official Kimi provider.

@@ -626,16 +626,12 @@ class LanguageModel:
             generation_kwargs["api_key"] = os.environ[api_key_env_name]
         if client_name == "openai":
             generation_kwargs.pop("custom_llm_provider", None)
-        function = {
-            "chat_completions": {
-                "openai": OpenAI().chat.completions.create,
-                "litellm": litellm.completion,
-            },
-            "responses": {
-                "openai": OpenAI().responses.create,
-                "litellm": litellm.responses,
-            },
-        }[api_type][client_name]
+        function = get_raw_lm_caller(
+            api_type=api_type,
+            client_name=client_name,
+            api_key=generation_kwargs.get("api_key"),
+            base_url=generation_kwargs.get("base_url"),
+        )
         valid_generation_kwargs_keys = set(inspect.signature(function).parameters.keys())
         if client_name == "openai":  # It'll be removed from generation_kwargs later.
             valid_generation_kwargs_keys.add("api_key")

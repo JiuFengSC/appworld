@@ -61,13 +61,16 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
         app_descriptions = deepcopy(self.world.task.app_descriptions)
         app_descriptions.pop("api_docs", None)
         app_descriptions_string = dump_yaml(app_descriptions).rstrip()
+        # Pass skill_text="" so the prompt parser never sees the skill markdown,
+        # which can contain "---..." lines that AppWorld mistakes for message separators.
+        # The skill is prepended to the task-instruction message after parsing.
         header_content = render_template(
             self.prompt_template,
             instruction=world.task.instruction,
             app_descriptions=app_descriptions_string,
             main_user=self.world.task.supervisor,
             max_steps=self.max_steps,
-            skill_text=self.skill_text,
+            skill_text="",
         )
         header_messages = load_prompt_to_chat_messages(
             header_content,
@@ -80,12 +83,15 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
             app_descriptions=app_descriptions_string,
             main_user=self.world.task.supervisor,
             max_steps=self.max_steps,
-            skill_text=self.skill_text,
+            skill_text="",
         )
         test_input_messages = load_prompt_to_chat_messages(
             test_input_content, skip_system_message=True, only_body=True, end_at=1
         )
         self.messages = header_messages + self.demo_messages + test_input_messages
+        if self.skill_text:
+            # Prepend skill to the final user message (the task-instruction turn).
+            self.messages[-1]["content"] = self.skill_text + "\n\n" + self.messages[-1]["content"]
 
     def next_execution_inputs_usage_and_status(
         self, last_execution_outputs: Sequence[ExecutionIO]
@@ -106,6 +112,11 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
         predicted_apis, raw_message = self.api_predictor.predict(
             task=self.world.task, lm_calls_log_file_path=lm_calls_log_file_path
         )
+        credential_api = f"supervisor{self.app_api_separator}show_account_passwords"
+        login_suffix = f"{self.app_api_separator}login"
+        if any(api.endswith(login_suffix) for api in predicted_apis):
+            predicted_apis = sorted(set(predicted_apis) | {credential_api})
+            raw_message["content"] = "\n".join(predicted_apis)
         content = "Predicted APIs needed for the task:\n\n" + raw_message["content"]
         error_message = raw_message.pop("error", None)
         if error_message:
@@ -156,6 +167,8 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
             if not isinstance(arguments, dict):
                 print("WARNING: Language model returned non-object arguments. Skipping.")
                 continue
+            if isinstance(arguments.get("page_limit"), int) and arguments["page_limit"] > 20:
+                arguments["page_limit"] = 20
             arguments_str = str(arguments)
             api_code = f"print({app_name}{self.app_api_separator}{api_name}(**{arguments_str}))"
             function_id = tool_call.get("call_id", tool_call["id"])

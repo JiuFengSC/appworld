@@ -22,7 +22,7 @@ MODEL_INFOS = [
             },
         },
         "function_calling": True,
-        "tool_choice": "auto",
+        "tool_choice": "required",
         "function_calling_demos": True,
         "part_of": ["v2"],
         "provider": "alibaba",
@@ -47,7 +47,7 @@ MODEL_INFOS = [
             },
         },
         "function_calling": True,
-        "tool_choice": "auto",
+        "tool_choice": "required",
         "function_calling_demos": True,
         "part_of": ["v2"],
         "provider": "alibaba",
@@ -173,7 +173,7 @@ MODEL_INFOS = [
             },
         },
         "function_calling": True,
-        "tool_choice": "auto",
+        "tool_choice": "required",
         "function_calling_demos": False,
         "remove_function_property_keys": [
             "exclusiveMinimum",
@@ -230,6 +230,49 @@ MODEL_INFOS = [
                 "--enable-auto-tool-choice --tool-call-parser hermes --port {port}"
             ),
             "timeout": 600,
+            "show_logs": False,
+        },
+        "part_of": ["vn", "vllm"],
+        "provider": "vllm",
+    },
+    {
+        "model_name": "qwen3-32b-without-reasoning",
+        "client_name": "openai",
+        "model_id": "Qwen/Qwen3-32B",
+        "model_kwargs": {
+            "api_type": "chat_completions",
+            "temperature": 0.7,
+            "seed": 100,
+            "api_key_env_name": "NO_API_KEY",
+            "base_url": "{MODEL_SERVER_URL}/v1",
+            "max_completion_tokens": 3000,
+            "extra_body": {"chat_template_kwargs": {"enable_thinking": False}},
+            "tool_parser_name": "qwen3",
+            "parallel_tool_calls": True,
+            "cost_per_token": {
+                "input_cache_miss": 0.0,
+                "input_cache_hit": 0.0,
+                "input_cache_write": 0.0,
+                "output": 0.0,
+            },
+        },
+        "function_calling": True,
+        "tool_choice": "required",
+        "function_calling_demos": False,
+        "remove_function_property_keys": [
+            "exclusiveMinimum",
+            "exclusiveMaximum",
+            "minimum",
+            "maximum",
+        ],  # only needed for vllm because of a bug
+        "model_server_config": {
+            "enabled": True,
+            "command": (  # NOTE: Do not add reasoning parser as it is disabled here.
+                "vllm serve Qwen/Qwen3-32B --max-num-seqs 5 --max-model-len 40000 "
+                "--tensor-parallel-size 2 --enable-auto-tool-choice --tool-call-parser hermes "
+                "--port {port}"
+            ),
+            "timeout": 900,
             "show_logs": False,
         },
         "part_of": ["vn", "vllm"],
