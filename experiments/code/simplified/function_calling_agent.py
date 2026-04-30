@@ -135,7 +135,6 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
             for doc in self.world.task.api_docs.function_calling()
             if doc["function"]["name"] in predicted_apis
         ]
-        self.allowed_function_names = {doc["function"]["name"] for doc in self.functions}
         for function in self.functions:
             for _, parameter_info in function["function"]["parameters"]["properties"].items():
                 for property_key in self.remove_function_property_keys:
@@ -149,12 +148,6 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
         apis_code = ""
         for tool_call in tool_calls:  # parallel tool calls.
             function_name = tool_call["function"]["name"]
-            if function_name not in self.allowed_function_names:
-                print(
-                    "WARNING: Language model returned a function name that was not advertised "
-                    "in the tool schema. Skipping."
-                )
-                continue
             if function_name.count(self.app_api_separator) != 1:
                 print("WARNING: Language model returned an invalid function name. Skipping.")
                 continue
@@ -171,7 +164,10 @@ class SimplifiedFunctionCallingAgent(Agent):  # type: ignore[misc]
                 arguments["page_limit"] = 20
             arguments_str = str(arguments)
             api_code = f"print({app_name}{self.app_api_separator}{api_name}(**{arguments_str}))"
-            function_id = tool_call.get("call_id", tool_call["id"])
+            function_id = tool_call.get("call_id") or tool_call.get("id")
+            if not function_id:
+                import secrets
+                function_id = f"call_{secrets.token_hex(8)}"
             execution_input = ExecutionIO(
                 content=api_code,
                 metadata={"id": function_id, "function_name": function_name},
